@@ -1,0 +1,453 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>ESP32 Joystick Simulator</title>
+  <style>
+    h2.page-title {
+      text-align: center;
+      margin-top: 28px;
+      font-size: 2.2em;
+      font-weight: 700;
+      color: #1976d2;
+      letter-spacing: 1px;
+      text-shadow: 0 2px 8px #b3c6e0;
+    }
+    .gamepad-layout {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      width: 100vw;
+      max-width: 100vw;
+      gap: 2vw;
+      box-sizing: border-box;
+      padding: 1vw;
+    }
+    .slider-row {
+      display: flex;
+      flex-direction: row;
+      justify-content: center;
+      gap: 2vw;
+      margin-bottom: 1vw;
+      width: 98vw;
+      max-width: 98vw;
+      box-sizing: border-box;
+    }
+    .joystick-row {
+      display: flex;
+      flex-direction: row;
+      justify-content: center;
+      gap: 6vw;
+      margin-bottom: 1vw;
+      width: 98vw;
+      max-width: 98vw;
+      box-sizing: border-box;
+    }
+    .switch-row {
+      display: flex;
+      flex-direction: row;
+      justify-content: center;
+      gap: 4vw;
+      margin-top: 1vw;
+      width: 98vw;
+      max-width: 98vw;
+      box-sizing: border-box;
+    }
+    .gamepad-flex {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      margin: 0 2vw;
+      width: 100%;
+      max-width: 100%;
+      box-sizing: border-box;
+    }
+    .joystick-label {
+      text-align: center;
+      margin-top: 10px;
+      font-size: 1.1em;
+      color: #333;
+      font-weight: 500;
+      letter-spacing: 0.5px;
+    }
+    body {
+      margin: 0;
+      padding: 0;
+      font-family: 'Segoe UI', Arial, sans-serif;
+      background: linear-gradient(135deg, #e3f0ff 0%, #f8f9fa 100%);
+    }
+    .joystick-container {
+      width: 100%;
+      height: 0;
+      padding-bottom: 100%; /* maintain square aspect ratio */
+      max-width: 100%;
+      max-height: 100%;
+      position: relative;
+      margin: 2vw auto 1vw auto;
+      background: linear-gradient(135deg, #f0f4ff 0%, #e0e7ef 100%);
+      border-radius: 50%;
+      box-shadow: 0 0.6vw 2vw #b3c6e0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      touch-action: manipulation;
+      border: 0.2vw solid #90caf9;
+      transition: box-shadow 0.3s;
+    }
+    /* Style both joystick bases */
+    #joystick1-base, #joystick2-base {
+      position: absolute;
+      left: 50%;
+      top: 50%;
+      transform: translate(-50%,-50%);
+      width: 80%;
+      height: 80%;
+      border-radius: 50%;
+      background: radial-gradient(circle, #bbdefb 60%, #e3f2fd 100%);
+      box-shadow: 0 0.2vw 1vw #90caf9;
+      border: 0.2vw solid #64b5f6;
+    }
+    /* Style both joystick knobs */
+    #joystick1-knob, #joystick2-knob {
+      position: absolute;
+      left: 50%;
+      top: 50%;
+      transform: translate(-50%,-50%);
+      width: 14%;
+      height: 14%;
+      background: linear-gradient(135deg, #1976d2 0%, #64b5f6 100%);
+      border-radius: 50%;
+      box-shadow: 0 0.4vw 1.6vw #90caf9;
+      touch-action: none;
+      -webkit-user-select: none;
+      user-select: none;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #fff;
+      font-size: 2em;
+      border: 0.2vw solid #fff;
+      transition: box-shadow 0.2s, background 0.2s;
+    }
+    #joystick1-knob:active, #joystick2-knob:active {
+      box-shadow: 0 2px 8px #1976d2;
+      background: linear-gradient(135deg, #1565c0 0%, #42a5f5 100%);
+    }
+    .gamepad-row {
+      display: flex;
+      justify-content: space-around;
+      margin: 24px 0;
+      gap: 16px;
+    }
+    .slider-container {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      margin: 0 1vw;
+      background: #f5faff;
+      border-radius: 1vw;
+      box-shadow: 0 0.2vw 0.8vw #e3f2fd;
+      padding: 1vw 2vw 1vw 2vw;
+      border: 0.1vw solid #bbdefb;
+      width: 22vw;
+      max-width: 22vw;
+      box-sizing: border-box;
+    }
+    .switch-container {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      margin: 0 1vw;
+      background: #f5faff;
+      border-radius: 1vw;
+      box-shadow: 0 0.2vw 0.8vw #e3f2fd;
+      padding: 1vw 2vw 1vw 2vw;
+      border: 0.1vw solid #bbdefb;
+      width: 22vw;
+      max-width: 22vw;
+      box-sizing: border-box;
+    }
+    .switch-label {
+      margin-bottom: 5px;
+      font-size: 1.05em;
+      color: #1976d2;
+      font-weight: 500;
+    }
+  /* Remove unused joystick-btn styles for clarity */
+    @media (max-width: 500px) {
+      html, body {
+        font-size: 1em;
+        width: 100vw;
+        height: 100vh;
+        overflow: hidden;
+        margin: 0;
+        padding: 0;
+        background: linear-gradient(135deg, #e3f0ff 0%, #f8f9fa 100%);
+      }
+      body {
+        min-height: 100vh;
+        max-height: 100vh;
+        overflow: hidden;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: flex-start;
+        width: 100vw;
+      }
+      .gamepad-flex, .slider-container, .switch-container {
+        width: 100vw !important;
+        max-width: 100vw !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+      }
+      .joystick-container {
+        width: 70vw !important;
+        max-width: 70vw !important;
+        height: 70vw !important;
+        max-height: 70vw !important;
+        min-width: 90px;
+        min-height: 90px;
+        margin: 8px 0 0 0 !important;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+      #joystick1-knob, #joystick2-knob {
+        font-size: 1em;
+        width: 22px;
+        height: 22px;
+      }
+      input[type="range"] {
+        width: 80vw !important;
+        min-width: 60px;
+        max-width: 90vw;
+      }
+      h2.page-title {
+        font-size: 1em;
+        margin-top: 8px;
+        margin-bottom: 2px;
+        width: 100vw;
+        text-align: center;
+      }
+      .joystick-label {
+        font-size: 0.9em;
+        margin-top: 2px;
+        margin-bottom: 2px;
+        width: 100vw;
+        text-align: center;
+      }
+    }
+    input[type="range"] {
+      width: 18vw;
+      min-width: 10vw;
+      max-width: 20vw;
+      accent-color: #1976d2;
+      margin-top: 1vw;
+      margin-bottom: 0.2vw;
+      height: 0.4vw;
+      border-radius: 0.4vw;
+      background: linear-gradient(90deg, #90caf9 0%, #1976d2 100%);
+      box-shadow: 0 0.1vw 0.4vw #bbdefb;
+      transition: background 0.2s;
+    }
+    input[type="range"]::-webkit-slider-thumb {
+      background: #1976d2;
+      border: 2px solid #fff;
+      border-radius: 50%;
+      width: 18px;
+      height: 18px;
+      box-shadow: 0 2px 8px #90caf9;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+    input[type="range"]:active::-webkit-slider-thumb {
+      background: #1565c0;
+    }
+    input[type="checkbox"] {
+      accent-color: #1976d2;
+      width: 22px;
+      height: 22px;
+      margin-right: 8px;
+      cursor: pointer;
+      border-radius: 6px;
+      box-shadow: 0 1px 4px #bbdefb;
+      transition: accent-color 0.2s;
+    }
+  </style>
+</head>
+<body>
+  <h2 class="page-title">Gamepad / RC Transmitter</h2>
+  <div class="gamepad-layout">
+    <div class="slider-row">
+      <div class="slider-container">
+        <label for="slider1">Slider 1 (CH5)</label>
+        <input type="range" min="0" max="100" value="50" id="slider1">
+      </div>
+      <div class="slider-container">
+        <label for="slider2">Slider 2 (CH6)</label>
+        <input type="range" min="0" max="100" value="50" id="slider2">
+      </div>
+      <div class="slider-container">
+        <label for="slider3">Slider 3 (CH7)</label>
+        <input type="range" min="0" max="100" value="50" id="slider3">
+      </div>
+      <div class="slider-container">
+        <label for="slider4">Slider 4 (CH8)</label>
+        <input type="range" min="0" max="100" value="50" id="slider4">
+      </div>
+    </div>
+    <div class="joystick-row">
+      <div class="gamepad-flex">
+        <div class="joystick-container" id="joystick1">
+          <div id="joystick1-base"></div>
+          <div id="joystick1-knob">&#9679;</div>
+        </div>
+        <div class="joystick-label">Joystick 1 (CH1:X, CH2:Y)</div>
+      </div>
+      <div class="gamepad-flex">
+        <div class="joystick-container" id="joystick2">
+          <div id="joystick2-base"></div>
+          <div id="joystick2-knob">&#9679;</div>
+        </div>
+        <div class="joystick-label">Joystick 2 (CH3:X, CH4:Y)</div>
+      </div>
+    </div>
+    <div class="switch-row">
+      <div class="switch-container">
+        <span class="switch-label">Switch 1 (CH9)</span>
+        <label class="switch">
+          <input type="checkbox" id="switch1">
+          <span>ON/OFF</span>
+        </label>
+      </div>
+      <div class="switch-container">
+        <span class="switch-label">Switch 2 (CH10)</span>
+        <label class="switch">
+          <input type="checkbox" id="switch2">
+          <span>ON/OFF</span>
+        </label>
+      </div>
+    </div>
+  </div>
+  <script>
+    // Multi-joystick implementation
+    function setupJoystick(knobId, baseId, chX, chY) {
+      const knob = document.getElementById(knobId);
+      const base = document.getElementById(baseId);
+      let dragging = false;
+      let center = { x: 0, y: 0 };
+      let radius = 0;
+
+      function updateCenterAndRadius() {
+        const rect = base.getBoundingClientRect();
+        center.x = rect.left + rect.width / 2;
+        center.y = rect.top + rect.height / 2;
+        radius = rect.width / 2 * 0.95;
+      }
+
+      function sendAnalogDirection(dx, dy) {
+        // dx, dy are -1..1
+        const angle = Math.atan2(dy, dx) * 180 / Math.PI;
+        const dist = Math.sqrt(dx*dx + dy*dy);
+        // Send channel values
+        window.gamepadChannels[chX] = dx;
+        window.gamepadChannels[chY] = dy;
+        console.log(`Joystick ${knobId}: CH${chX}=${dx.toFixed(2)}, CH${chY}=${dy.toFixed(2)}, angle=${angle.toFixed(1)}, dist=${dist.toFixed(2)}`);
+        // Example fetch:
+        // fetch(`/channels?ch${chX}=${dx}&ch${chY}=${dy}`, { method: 'POST' })
+      }
+
+      function moveKnob(clientX, clientY) {
+        updateCenterAndRadius();
+        let dx = clientX - center.x;
+        let dy = clientY - center.y;
+        const dist = Math.sqrt(dx*dx + dy*dy);
+        if (dist > radius) {
+          dx = dx * radius / dist;
+          dy = dy * radius / dist;
+        }
+        knob.style.left = `calc(50% + ${dx}px)`;
+        knob.style.top = `calc(50% + ${dy}px)`;
+        knob.style.transform = 'translate(-50%,-50%)';
+        sendAnalogDirection(dx/radius, dy/radius);
+      }
+
+      function resetKnob() {
+        knob.style.left = '50%';
+        knob.style.top = '50%';
+        knob.style.transform = 'translate(-50%,-50%)';
+        sendAnalogDirection(0,0);
+      }
+
+      function startDrag(e) {
+        dragging = true;
+        document.body.style.userSelect = 'none';
+        document.body.style.webkitUserSelect = 'none';
+      }
+      function endDrag(e) {
+        dragging = false;
+        document.body.style.userSelect = '';
+        document.body.style.webkitUserSelect = '';
+        resetKnob();
+      }
+      function drag(e) {
+        if (!dragging) return;
+        let clientX, clientY;
+        if (e.touches) {
+          clientX = e.touches[0].clientX;
+          clientY = e.touches[0].clientY;
+        } else {
+          clientX = e.clientX;
+          clientY = e.clientY;
+        }
+        moveKnob(clientX, clientY);
+      }
+
+      knob.addEventListener('mousedown', startDrag);
+      document.addEventListener('mousemove', drag);
+      document.addEventListener('mouseup', endDrag);
+      knob.addEventListener('touchstart', function(e){ startDrag(e); }, {passive:false});
+      document.addEventListener('touchmove', drag, {passive:false});
+      document.addEventListener('touchend', endDrag);
+
+      window.addEventListener('resize', updateCenterAndRadius);
+      window.addEventListener('load', () => { updateCenterAndRadius(); resetKnob(); });
+    }
+
+    // Channel state
+    window.gamepadChannels = { 1:0, 2:0, 3:0, 4:0, 5:0.5, 6:0.5, 7:0.5, 8:0.5, 9:0, 10:0 };
+
+    setupJoystick('joystick1-knob', 'joystick1-base', 1, 2);
+    setupJoystick('joystick2-knob', 'joystick2-base', 3, 4);
+
+    // Sliders
+    for (let i=1; i<=4; i++) {
+      document.getElementById('slider'+i).addEventListener('input', function(e) {
+        window.gamepadChannels[4+i] = e.target.value/100;
+        console.log(`Slider CH${4+i}: ${window.gamepadChannels[4+i].toFixed(2)}`);
+        // Example fetch:
+        // fetch(`/channels?ch${4+i}=${window.gamepadChannels[4+i]}`, { method: 'POST' })
+      });
+    }
+
+    // Switches
+    document.getElementById('switch1').addEventListener('change', function(e) {
+      window.gamepadChannels[9] = e.target.checked ? 1 : 0;
+      console.log(`Switch CH9: ${window.gamepadChannels[9]}`);
+      // Example fetch:
+      // fetch(`/channels?ch9=${window.gamepadChannels[9]}`, { method: 'POST' })
+    });
+    document.getElementById('switch2').addEventListener('change', function(e) {
+      window.gamepadChannels[10] = e.target.checked ? 1 : 0;
+      console.log(`Switch CH10: ${window.gamepadChannels[10]}`);
+      // Example fetch:
+      // fetch(`/channels?ch10=${window.gamepadChannels[10]}`, { method: 'POST' })
+    });
+  </script>
+</body>
+</html>
