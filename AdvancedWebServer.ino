@@ -557,6 +557,46 @@ void writeChannelPWM(int ch, float val, bool stickStyle){
   ledcWrite(pin, duty);
 }
 
+// ==== BTS7960 Motor Driver Pin Definitions ====
+// Left BTS7960 (controls two left wheels)
+const int BTS7960_L_IN1 = 2;
+const int BTS7960_L_IN2 = 3;
+const int BTS7960_R_IN1 = 0;
+const int BTS7960_R_IN2 = 1;
+
+// Add these pins to DIGITAL_PINS for bookkeeping
+int BTS7960_PINS[] = { BTS7960_L_IN1, BTS7960_L_IN2,
+                       BTS7960_R_IN1, BTS7960_R_IN2 };
+int NUM_BTS7960 = sizeof(BTS7960_PINS) / sizeof(BTS7960_PINS[0]);
+
+// List of reserved pins (adjust for your board)
+int RESERVED_PINS[] = { 0, 1, 6, 7, 8, 9, 20, 21 }; // Example: boot/flash pins, update for your ESP32-C6
+int NUM_RESERVED = sizeof(RESERVED_PINS) / sizeof(RESERVED_PINS[0]);
+
+// Drive BTS7960 motor driver
+// val: -1.0 (full reverse) to +1.0 (full forward)
+void driveBTS7960(int in1, int in2, float val) {
+  // Clamp value
+  if (val > 1.0f) val = 1.0f;
+  if (val < -1.0f) val = -1.0f;
+  int pwm = (int)(fabs(val) * 1023); // 10-bit PWM
+  bool forward = (val >= 0);
+  // Set direction
+  digitalWrite(in1, forward ? HIGH : LOW);
+  digitalWrite(in2, forward ? LOW : HIGH);
+
+  // PWM on IN1/IN2
+  ledcAttach(in1, LEDC_FREQ, LEDC_RESOLUTION);
+  ledcAttach(in2, LEDC_FREQ, LEDC_RESOLUTION);
+  if (forward) {
+    ledcWrite(in1, pwm);
+    ledcWrite(in2, 0);
+  } else {
+    ledcWrite(in1, 0);
+    ledcWrite(in2, pwm);
+  }
+}
+
 // ---------- HTTP Handlers ----------
 void handleRoot(){
   server.send_P(200, "text/html; charset=utf-8", INDEX_HTML);
@@ -713,7 +753,6 @@ void handleAnalogWrite(){
   DynamicJsonDocument doc(128);
   doc["ok"]=true; doc["pin"]=pin; doc["duty"]=duty;
   String out; serializeJson(doc,out);
-  server.send(200, "application/json", out);
 }
 
 // === NEW: /api/gamepad — accept 10 channels and drive PWM ===
@@ -748,8 +787,12 @@ void handleGamepadFrame(){
     vals[i] = v;
   }
 
-  // Write all channels (CH1..CH4 sticks: -1..1; others sliders: 0..1)
-  for (int i=1; i<=10; i++){
+  // CH1: left wheels, CH2: right wheels
+  driveBTS7960(BTS7960_L_IN1, BTS7960_L_IN2, vals[1]);
+  driveBTS7960(BTS7960_R_IN1, BTS7960_R_IN2, vals[2]);
+
+  // Write other channels (CH3..CH10) as before
+  for (int i=3; i<=10; i++){
     bool stick = (i <= 4);
     writeChannelPWM(i, vals[i], stick);
   }
@@ -766,6 +809,16 @@ void setupPinBookkeeping(){
   for(int i=0;i<NUM_DIGITAL;i++){
     int pin = DIGITAL_PINS[i];
     applyMode(pin, PM_INPUT);
+  }
+  // Add BTS7960 pins, but skip reserved pins
+  for(int i=0;i<NUM_BTS7960;i++){
+    int pin = BTS7960_PINS[i];
+    if (isInList(pin, RESERVED_PINS, NUM_RESERVED)) {
+      Serial.printf("WARNING: BTS7960 pin %d is reserved, skipping!\n", pin);
+      continue;
+    }
+    pinMode(pin, OUTPUT); // Ensure hardware pin is set as OUTPUT
+    applyMode(pin, PM_OUTPUT); // Set bookkeeping as OUTPUT for motor control
   }
   // ensure mapped CHANNEL_PINS are at least known to bookkeeping
   for (int ch=1; ch<=10; ch++){
