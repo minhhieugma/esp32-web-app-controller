@@ -787,9 +787,19 @@ void handleGamepadFrame(){
     vals[i] = v;
   }
 
-  // CH1: left wheels, CH2: right wheels
-  driveBTS7960(BTS7960_L_IN1, BTS7960_L_IN2, vals[1]);
-  driveBTS7960(BTS7960_R_IN1, BTS7960_R_IN2, vals[2]);
+  // Mix joystick for differential drive
+  float x = vals[1]; // CH1: X (left/right)
+  float y = vals[2]; // CH2: Y (forward/back)
+  float left = y + x;
+  float right = y - x;
+  // Clamp to -1..1
+  if (left > 1.0f) left = 1.0f;
+  if (left < -1.0f) left = -1.0f;
+  if (right > 1.0f) right = 1.0f;
+  if (right < -1.0f) right = -1.0f;
+
+  driveBTS7960(BTS7960_L_IN1, BTS7960_L_IN2, left);
+  driveBTS7960(BTS7960_R_IN1, BTS7960_R_IN2, right);
 
   // Write other channels (CH3..CH10) as before
   for (int i=3; i<=10; i++){
