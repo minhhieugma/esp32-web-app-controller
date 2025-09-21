@@ -1,5 +1,5 @@
 /*
- * Servo Pan-Tilt Bracket Controller with 360 Demo - ESP32-C6 Version
+ * Servo Pan-Tilt Bracket Controller with Web & Serial Control - ESP32-C6 Version
  * 
  * This ESP32-C6 sketch controls a servo pan-tilt bracket system
  * Features:
@@ -7,7 +7,8 @@
  * - Tilt servo for vertical movement (0-180 degrees)
  * - Automatic 360-degree demo sequence
  * - Serial control for manual positioning
- * - WiFi capabilities (ESP32-C6 specific)
+ * - Web server control interface
+ * - WiFi capabilities with AP fallback
  * - Thread-safe operation with FreeRTOS
  * 
  * Hardware Connections (ESP32-C6):
@@ -25,6 +26,9 @@
  */
 
 #include <ESP32Servo.h>  // ESP32-specific servo library
+#include <WiFi.h>
+#include <WebServer.h>
+#include <ArduinoJson.h>
 
 // Servo objects
 Servo panServo;
@@ -54,6 +58,17 @@ const int DEMO_DELAY = 50; // Delay between servo movements in demo (ms)
 int panDirection = 1;
 int tiltDirection = 1;
 const int MOVEMENT_SPEED = 2; // Degrees per step
+
+// WiFi credentials - modify these for your network
+const char* ssid = "HieuLe";
+const char* password = "Lmhieu13071990";
+
+// Access Point credentials (fallback)
+const char* ap_ssid = "ESP32-ServoController";
+const char* ap_password = "servo123";
+
+// Web server
+WebServer server(80);
 
 void setup() {
   Serial.begin(115200);
@@ -89,6 +104,12 @@ void setup() {
   panServo.write(panPosition);
   tiltServo.write(tiltPosition);
   
+  // Initialize WiFi
+  setupWiFi();
+  
+  // Setup web server routes
+  setupWebServer();
+  
   Serial.println("Servo Pan-Tilt Controller Initialized");
   Serial.println("Commands:");
   Serial.println("  p[angle] - Set pan angle (0-180)");
@@ -103,7 +124,254 @@ void setup() {
   delay(1000); // Allow servos to reach initial position
 }
 
+void setupWiFi() {
+  Serial.println("Setting up WiFi...");
+  
+  // Try to connect to existing WiFi network
+  WiFi.begin(ssid, password);
+  Serial.print("Connecting to WiFi");
+  
+  int attempts = 0;
+  while (WiFi.status() != WL_CONNECTED && attempts < 20) {
+    delay(500);
+    Serial.print(".");
+    attempts++;
+  }
+  
+  if (WiFi.status() == WL_CONNECTED) {
+    Serial.println();
+    Serial.println("WiFi connected successfully!");
+    Serial.print("IP address: ");
+    Serial.println(WiFi.localIP());
+  } else {
+    Serial.println();
+    Serial.println("Failed to connect to WiFi. Starting Access Point...");
+    
+    // Start Access Point
+    WiFi.softAP(ap_ssid, ap_password);
+    Serial.print("Access Point started. IP: ");
+    Serial.println(WiFi.softAPIP());
+    Serial.print("Network: ");
+    Serial.println(ap_ssid);
+    Serial.print("Password: ");
+    Serial.println(ap_password);
+  }
+}
+
+void setupWebServer() {
+  // Serve main control page
+  server.on("/", HTTP_GET, []() {
+    server.send(200, "text/html", getMainPage());
+  });
+  
+  // API endpoints
+  server.on("/api/pan", HTTP_POST, handlePanAPI);
+  server.on("/api/tilt", HTTP_POST, handleTiltAPI);
+  server.on("/api/position", HTTP_GET, handlePositionAPI);
+  server.on("/api/demo", HTTP_POST, handleDemoAPI);
+  server.on("/api/center", HTTP_POST, handleCenterAPI);
+  server.on("/api/status", HTTP_GET, handleStatusAPI);
+  
+  // CORS headers for all requests
+  server.enableCORS(true);
+  
+  server.begin();
+  Serial.println("Web server started!");
+  if (WiFi.status() == WL_CONNECTED) {
+    Serial.print("Open http://");
+    Serial.print(WiFi.localIP());
+    Serial.println(" in your browser");
+  } else {
+    Serial.print("Open http://");
+    Serial.print(WiFi.softAPIP());
+    Serial.println(" in your browser");
+  }
+}
+
+String getMainPage() {
+  String html = "<!DOCTYPE html>";
+  html += "<html>";
+  html += "<head>";
+  html += "<title>ESP32 Servo Controller</title>";
+  html += "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">";
+  html += "<style>";
+  html += "body { font-family: Arial; margin: 20px; background: #f0f0f0; }";
+  html += ".container { max-width: 600px; margin: 0 auto; background: white; padding: 20px; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }";
+  html += "h1 { color: #333; text-align: center; }";
+  html += ".control-group { margin: 20px 0; padding: 15px; background: #f9f9f9; border-radius: 5px; }";
+  html += ".slider-container { margin: 10px 0; }";
+  html += "label { display: block; margin-bottom: 5px; font-weight: bold; }";
+  html += "input[type=\"range\"] { width: 100%; height: 30px; }";
+  html += ".value-display { text-align: center; font-size: 18px; margin: 5px 0; color: #666; }";
+  html += "button { background: #4CAF50; color: white; padding: 10px 20px; border: none; border-radius: 5px; cursor: pointer; margin: 5px; font-size: 16px; }";
+  html += "button:hover { background: #45a049; }";
+  html += "button.danger { background: #f44336; }";
+  html += "button.danger:hover { background: #da190b; }";
+  html += ".status { padding: 10px; background: #e7f3ff; border-radius: 5px; margin: 10px 0; }";
+  html += ".demo-status { text-align: center; font-weight: bold; }";
+  html += "</style>";
+  html += "</head>";
+  html += "<body>";
+  html += "<div class=\"container\">";
+  html += "<h1>ESP32 Servo Controller</h1>";
+  
+  html += "<div class=\"control-group\">";
+  html += "<h3>Pan Control (Horizontal)</h3>";
+  html += "<div class=\"slider-container\">";
+  html += "<label for=\"panSlider\">Pan Angle:</label>";
+  html += "<input type=\"range\" id=\"panSlider\" min=\"0\" max=\"180\" value=\"90\">";
+  html += "<div class=\"value-display\" id=\"panValue\">90&deg;</div>";
+  html += "</div>";
+  html += "</div>";
+  
+  html += "<div class=\"control-group\">";
+  html += "<h3>Tilt Control (Vertical)</h3>";
+  html += "<div class=\"slider-container\">";
+  html += "<label for=\"tiltSlider\">Tilt Angle:</label>";
+  html += "<input type=\"range\" id=\"tiltSlider\" min=\"0\" max=\"180\" value=\"90\">";
+  html += "<div class=\"value-display\" id=\"tiltValue\">90&deg;</div>";
+  html += "</div>";
+  html += "</div>";
+  
+  html += "<div class=\"control-group\">";
+  html += "<h3>Quick Controls</h3>";
+  html += "<button onclick=\"centerServos()\">Center Servos</button>";
+  html += "<button onclick=\"toggleDemo()\" id=\"demoBtn\">Toggle Demo</button>";
+  html += "</div>";
+  
+  html += "<div class=\"status\">";
+  html += "<div class=\"demo-status\" id=\"demoStatus\">Demo: ON</div>";
+  html += "</div>";
+  html += "</div>";
+
+  html += "<script>";
+  html += "var panSlider = document.getElementById('panSlider');";
+  html += "var tiltSlider = document.getElementById('tiltSlider');";
+  html += "var panValue = document.getElementById('panValue');";
+  html += "var tiltValue = document.getElementById('tiltValue');";
+  html += "var demoStatus = document.getElementById('demoStatus');";
+  
+  html += "panSlider.addEventListener('input', function() {";
+  html += "panValue.innerHTML = this.value + '&deg;';";
+  html += "setPan(this.value);";
+  html += "});";
+  
+  html += "tiltSlider.addEventListener('input', function() {";
+  html += "tiltValue.innerHTML = this.value + '&deg;';";
+  html += "setTilt(this.value);";
+  html += "});";
+  
+  html += "function setPan(angle) {";
+  html += "fetch('/api/pan', {";
+  html += "method: 'POST',";
+  html += "headers: {'Content-Type': 'application/json'},";
+  html += "body: JSON.stringify({angle: parseInt(angle)})";
+  html += "});";
+  html += "}";
+  
+  html += "function setTilt(angle) {";
+  html += "fetch('/api/tilt', {";
+  html += "method: 'POST',";
+  html += "headers: {'Content-Type': 'application/json'},";
+  html += "body: JSON.stringify({angle: parseInt(angle)})";
+  html += "});";
+  html += "}";
+  
+  html += "function centerServos() {";
+  html += "fetch('/api/center', {method: 'POST'})";
+  html += ".then(function() {";
+  html += "panSlider.value = 90;";
+  html += "tiltSlider.value = 90;";
+  html += "panValue.innerHTML = '90&deg;';";
+  html += "tiltValue.innerHTML = '90&deg;';";
+  html += "});";
+  html += "}";
+  
+  html += "function toggleDemo() {";
+  html += "fetch('/api/demo', {method: 'POST'})";
+  html += ".then(function(response) { return response.json(); })";
+  html += ".then(function(data) {";
+  html += "demoStatus.innerHTML = 'Demo: ' + (data.demo ? 'ON' : 'OFF');";
+  html += "});";
+  html += "}";
+  
+  html += "setInterval(function() {";
+  html += "fetch('/api/status')";
+  html += ".then(function(response) { return response.json(); })";
+  html += ".then(function(data) {";
+  html += "if (!document.hasFocus()) return;";
+  html += "panSlider.value = data.pan;";
+  html += "tiltSlider.value = data.tilt;";
+  html += "panValue.innerHTML = data.pan + '&deg;';";
+  html += "tiltValue.innerHTML = data.tilt + '&deg;';";
+  html += "demoStatus.innerHTML = 'Demo: ' + (data.demo ? 'ON' : 'OFF');";
+  html += "});";
+  html += "}, 2000);";
+  html += "</script>";
+  html += "</body>";
+  html += "</html>";
+  
+  return html;
+}
+
+void handlePanAPI() {
+  if (server.hasArg("plain")) {
+    DynamicJsonDocument doc(200);
+    deserializeJson(doc, server.arg("plain"));
+    int angle = doc["angle"];
+    setPanAngle(angle);
+    server.send(200, "application/json", "{\"status\":\"ok\",\"pan\":" + String(panPosition) + "}");
+  } else {
+    server.send(400, "application/json", "{\"error\":\"Invalid request\"}");
+  }
+}
+
+void handleTiltAPI() {
+  if (server.hasArg("plain")) {
+    DynamicJsonDocument doc(200);
+    deserializeJson(doc, server.arg("plain"));
+    int angle = doc["angle"];
+    setTiltAngle(angle);
+    server.send(200, "application/json", "{\"status\":\"ok\",\"tilt\":" + String(tiltPosition) + "}");
+  } else {
+    server.send(400, "application/json", "{\"error\":\"Invalid request\"}");
+  }
+}
+
+void handlePositionAPI() {
+  String json = "{\"pan\":" + String(panPosition) + ",\"tilt\":" + String(tiltPosition) + "}";
+  server.send(200, "application/json", json);
+}
+
+void handleDemoAPI() {
+  demoMode = !demoMode;
+  if (demoMode) {
+    demoStep = 0;
+  }
+  String json = "{\"demo\":" + String(demoMode ? "true" : "false") + "}";
+  server.send(200, "application/json", json);
+  Serial.println(demoMode ? "Demo mode ON (Web)" : "Demo mode OFF (Web)");
+}
+
+void handleCenterAPI() {
+  demoMode = false;
+  setPanAngle(90);
+  setTiltAngle(90);
+  server.send(200, "application/json", "{\"status\":\"centered\"}");
+  Serial.println("Servos centered (Web)");
+}
+
+void handleStatusAPI() {
+  String json = "{\"pan\":" + String(panPosition) + 
+                ",\"tilt\":" + String(tiltPosition) + 
+                ",\"demo\":" + String(demoMode ? "true" : "false") + "}";
+  server.send(200, "application/json", json);
+}
+
 void loop() {
+  // Handle web server requests
+  server.handleClient();
+  
   // Handle serial commands
   if (Serial.available()) {
     handleSerialCommand();
@@ -335,5 +603,33 @@ void showESP32Info() {
   Serial.println("- RISC-V 32-bit single-core processor");
   Serial.println("- 16 PWM channels available");
   Serial.println("- Built-in USB Serial/JTAG controller");
+  
+  // WiFi Information
+  Serial.println("\nWiFi Configuration:");
+  if (WiFi.status() == WL_CONNECTED) {
+    Serial.print("Connected to: ");
+    Serial.println(WiFi.SSID());
+    Serial.print("IP Address: ");
+    Serial.println(WiFi.localIP());
+    Serial.print("Signal Strength: ");
+    Serial.print(WiFi.RSSI());
+    Serial.println(" dBm");
+  } else {
+    Serial.println("Access Point Mode");
+    Serial.print("AP SSID: ");
+    Serial.println(ap_ssid);
+    Serial.print("AP IP: ");
+    Serial.println(WiFi.softAPIP());
+  }
+  
+  Serial.println("\nWeb Server:");
+  Serial.print("Status: Running on port 80");
+  Serial.println("\nAPI Endpoints:");
+  Serial.println("- POST /api/pan - Set pan angle");
+  Serial.println("- POST /api/tilt - Set tilt angle");
+  Serial.println("- GET /api/status - Get current status");
+  Serial.println("- POST /api/demo - Toggle demo mode");
+  Serial.println("- POST /api/center - Center servos");
+  
   Serial.println("====================================\n");
 }
