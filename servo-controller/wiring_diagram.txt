@@ -1,0 +1,107 @@
+/*
+ * WIRING DIAGRAM - ESP32-C6 Servo Pan-Tilt Bracket Controller
+ * 
+ * ESP32-C6 DevKit Connections:
+ * =============================
+ * 
+ *    ESP32-C6         Pan Servo (SG90)         Tilt Servo (SG90)
+ *    --------         ----------------         ------------------
+ *    GPIO 18  ------>  Signal (Orange)
+ *    GPIO 19  ------------------------->      Signal (Orange)  
+ *    Ext 5V   ------>  VCC (Red)       ------>  VCC (Red)
+ *    GND      ------>  GND (Brown)     ------>  GND (Brown)
+ * 
+ * ESP32-C6 Pinout Reference:
+ * ==========================
+ *                   ESP32-C6 DevKitC-1
+ *                  ┌─────────────────────┐
+ *           3V3 ──┤1                  21├── GPIO21
+ *           RST ──┤2                  20├── GPIO20  
+ *         GPIO4 ──┤3                  19├── GPIO19 (Tilt Servo)
+ *         GPIO5 ──┤4                  18├── GPIO18 (Pan Servo)
+ *         GPIO6 ──┤5                  17├── GPIO10
+ *         GPIO7 ──┤6                  16├── GPIO9
+ *       GPIO15 ──┤7    [USB-C]        15├── GPIO8 (Built-in LED)
+ *       GPIO16 ──┤8                  14├── GPIO3
+ *       GPIO17 ──┤9                  13├── GPIO2
+ *         GPIO22 ──┤10                12├── GPIO1
+ *         GPIO23 ──┤11   ESP32-C6     11├── GPIO0 (BOOT)
+ *           GND ──┤12  (RISC-V)      10├── GND
+ *                  └─────────────────────┘
+ * 
+ * 
+ * Physical Setup:
+ * ===============
+ * 
+ * 1. Pan Servo (Base/Bottom):
+ *    - Mounted horizontally on base
+ *    - Controls left-right movement (0° = left, 90° = center, 180° = right)
+ *    - Servo horn attached to vertical bracket
+ * 
+ * 2. Tilt Servo (Top):
+ *    - Mounted on pan servo's moving bracket
+ *    - Controls up-down movement (0° = up, 90° = center, 180° = down)
+ *    - Camera/payload attached to tilt servo horn
+ * 
+ * 
+ * Power Considerations:
+ * =====================
+ * 
+ * Option 1 - Arduino Power (Light loads only):
+ * └── Use Arduino 5V pin for both servos
+ * └── Maximum ~500mA total current
+ * └── Suitable for SG90 micro servos without heavy loads
+ * 
+ * Option 2 - External Power (Recommended):
+ * ┌── External 5V Power Supply (2A+)
+ * ├── Connect VCC of both servos to external 5V
+ * ├── Connect Arduino GND to external power GND
+ * └── Keep Arduino powered separately via USB or Vin
+ * 
+ * 
+ * Bracket Assembly Order:
+ * =======================
+ * 
+ * 1. Base Platform
+ * 2. Pan Servo (horizontal, controls rotation)
+ * 3. Vertical Bracket (attached to pan servo horn)
+ * 4. Tilt Servo (mounted on vertical bracket)
+ * 5. Camera/Payload Mount (attached to tilt servo horn)
+ * 
+ * 
+ * Servo Angle Reference:
+ * ======================
+ * 
+ * Pan Servo (Horizontal Movement):
+ *   0° = Full Left
+ *  90° = Center
+ * 180° = Full Right
+ * 
+ * Tilt Servo (Vertical Movement):
+ *   0° = Full Up
+ *  90° = Center/Level
+ * 180° = Full Down
+ * 
+ * 
+ * Demo Movement Patterns:
+ * =======================
+ * 
+ * Phase 1 - Pan Sweep:
+ * Pan: 0° → 180° → 0° (sweeping)
+ * Tilt: 90° (fixed center)
+ * 
+ * Phase 2 - Combined Movement:
+ * Pan: 0° ↔ 180° (continuous)
+ * Tilt: 0° ↔ 180° (oscillating)
+ * 
+ * Phase 3 - Circular Motion:
+ * Creates smooth circular patterns using sine/cosine
+ * Center point: Pan=90°, Tilt=90°
+ * Radius: ±30° from center
+ * 
+ * Phase 4 - Random Positioning:
+ * Both servos move to random positions
+ * Changes every 2 seconds
+ * Cycles through 5 random positions before restarting
+ * 
+ */
